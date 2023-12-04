@@ -1,0 +1,82 @@
+version: "3"
+services:
+  miting:
+    image: miting:v3
+    container_name: miting # 容器名称miting硬编码到main.py中了
+    user: root:root
+    command: nginx
+    network_mode: "host"
+    volumes:
+      - ./resource/openresty:/usr/local/openresty
+      - ./logs/waf_log:/var/log/waf_log
+      - ./logs/mt_log:/usr/local/openresty/nginx/logs
+    environment:
+      - TZ=Asia/Shanghai
+
+  ids:
+    image: jasonish/suricata:latest
+    container_name: ids
+    user: root:root
+    network_mode: "host"
+    volumes:
+      - ./logs/ids_log/:/var/log/suricata
+      - ./resource/ids_rules/:/var/lib/suricata/rules
+    cap_add:
+      - net_admin
+      - net_raw
+      - sys_nice
+    command: -i ens33 # 设备需要监控的网卡
+    environment:
+      - TZ=Asia/Shanghai
+  
+  interface:
+    build:
+      context: .
+      dockerfile: DooD.Dockerfile
+    container_name: api
+    user: root:root
+    command: ./API.docker-enterpoint.sh
+    network_mode: "host"
+    volumes:
+      - ./resource/openresty:/usr/local/openresty
+      - ./resource/api:/app/api
+      - ./logs/ids_log:/var/log/suricata
+      - ./logs/waf_log:/var/log/waf_log
+      - ./logs/mt_log:/var/log/mt_log
+      - ./logs/cut_log:/var/log/cut_logs
+      - ./resource/bak:/usr/bak
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - NETWORK_CARD=ens33
+      - PCAP_DIR=/usr/local/openresty/pcap
+      - ALL_ALLOW_LIST=/usr/local/openresty/nginx/conf/allow_list_all.conf
+      - NGINX_CONF=/usr/local/openresty/nginx/conf/nginx.conf
+      - IDS_LOG=/var/log/suricata/fast.log
+      - ACCESS_LOG=/var/log/mt_log/access.log
+      - ERROR_LOG=/var/log/mt_log/error.log
+      - SERVER_LIST=/usr/local/openresty/nginx/conf/server_list
+      - ALLOW_LIST=/usr/local/openresty/nginx/conf/allow_list
+      - SERVER_ROOT=/usr/local/openresty/nginx/conf
+      - CUT_LOG=/var/log/cut_logs
+      - IP_DOMAIN=/app/api/ip_domain_map.json
+      - REPUTATION=http://127.0.0.1:8000/reputation/ip # url后面不要加/
+      - DB_URL=mongodb://localhost:27017
+      - DB_USERNAME=root
+      - DB_PASSWORD=F4ngB@nM1T1ng
+      - TZ=Asia/Shanghai
+      - BAK=/usr/bak
+      - WAF_LOG=/var/log/waf_log/modsec_audit.log
+      - SERVER_API_PORT=5000
+
+  db:
+    image: mongo:latest
+    container_name: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - ./resource/db_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=F4ngB@nM1T1ng
+      - TZ=Asia/Shanghai
